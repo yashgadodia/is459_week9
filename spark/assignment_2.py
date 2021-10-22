@@ -7,8 +7,6 @@ spark = SparkSession.builder.appName('sg.edu.smu.is459.assignment2').getOrCreate
 
 # Load data
 posts_df = spark.read.load('/Users/yash/parquet-input/hardwarezone.parquet')
-# posts_df = spark.read.load('/Users/yash/parquet-input/hardwarezone.parquet')
-# posts_df = spark.read.load('/Users/yash/Google\ Drive/Yash/SMU/Y3S1/IS459/test/SMU-IS459/spark/hardwarezone.parquet')
 
 # Clean the dataframe by removing rows with any null value
 posts_df = posts_df.na.drop()
