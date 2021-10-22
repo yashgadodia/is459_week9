@@ -1,7 +1,9 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.types import *
-from pyspark.sql.functions import explode, window
+from pyspark.sql.functions import explode
 from pyspark.sql.functions import split
+from pyspark.sql.functions import window
+from pyspark.sql.functions import col,desc
 
 def parse_data_from_kafka_message(sdf, schema):
     from pyspark.sql.functions import split
@@ -31,15 +33,6 @@ if __name__ == "__main__":
     #Parse the fields in the value column of the message
     lines = df.selectExpr("CAST(value AS STRING)", "timestamp")
 
-    # lines = lines \
-    #     .withWatermark("timestamp", "2 minutes") \
-    #     .groupBy(
-    #         window("timestamp", "2 minutes", "1 minutes"),
-    #         "timestamp"
-    #     ) \
-    #     .count() \
-    #     .limit(10)
-
     #Specify the schema of the fields
     hardwarezoneSchema = StructType([ \
         StructField("topic", StringType()), \
@@ -48,18 +41,32 @@ if __name__ == "__main__":
         ])
 
     #Use the function to parse the fields
-    lines = parse_data_from_kafka_message(lines, hardwarezoneSchema) \
+    wordlines = parse_data_from_kafka_message(lines, hardwarezoneSchema) \
+        .select("content","timestamp")
+
+    wordline = wordlines.withColumn('content',explode(split('content',' '))).withColumnRenamed('content', 'word')
+
+    authorlines = parse_data_from_kafka_message(lines, hardwarezoneSchema) \
         .select("topic","author","content","timestamp")
 
+    windowedauthor = authorlines \
+        .withWatermark("timestamp", "2 minutes") \
+        .groupBy(
+            window("timestamp", "2 minutes", "1 minutes"),
+            "author"
+        ) \
+        .count() \
+        .limit(10)
+
+    windowedauthor = windowedauthor.orderBy(col('count').desc())
+
     #Select the content field and output
-    contents = lines \
+    content = windowedauthor \
         .writeStream \
         .queryName("WriteContent") \
-        .outputMode("append") \
+        .outputMode("complete") \
         .format("console") \
         .start()
-        # .trigger(processingTime='2 minutes') \
-        # .option("checkpointLocation", "/user/zzj/spark-checkpoint") \
 
     #Start the job and wait for the incoming messages
-    contents.awaitTermination()
+    content.awaitTermination()
